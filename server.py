@@ -1,9 +1,9 @@
 """
 Gulf-Market Arabic CV Rewriter - backend.
 
-Day 2: the placeholder prompt is gone. The system prompt is assembled by
-prompt_loader from prompts/rewrite-prompt.md, which is where all prompt
-iteration happens - nothing about the wording lives in this file.
+Day 3: the register and output-language choices made in the browser are now
+wired through to the prompt, and "both" responses are split into two fields so
+the frontend can lay them out side by side instead of showing one blob.
 """
 
 from __future__ import annotations
@@ -28,6 +28,11 @@ PREAMBLE = re.compile(
     r"^\s*(here (is|are)[^\n:]*:|sure[^\n]*:|الترجمة[^\n]*:|النص[^\n]*:)\s*\n",
     re.IGNORECASE,
 )
+SEPARATOR = re.compile(r"^\s*-{3,}\s*$", re.MULTILINE)
+
+# Rough test for "does this line carry Arabic script". Used only to decide which
+# half of a two-part response is which when the model emits them out of order.
+ARABIC = re.compile(r"[؀-ۿ]")
 
 
 def clean(text: str) -> str:
@@ -35,8 +40,35 @@ def clean(text: str) -> str:
     fenced = FENCE.match(text)
     if fenced:
         text = fenced.group(1).strip()
-    text = PREAMBLE.sub("", text).strip()
-    return text
+    return PREAMBLE.sub("", text).strip()
+
+
+def is_arabic(text: str) -> bool:
+    """True if Arabic script dominates. Tech-register bullets are mixed, so a
+    presence check is not enough - compare against Latin letters."""
+    arabic = len(ARABIC.findall(text))
+    latin = len(re.findall(r"[A-Za-z]", text))
+    return arabic > latin
+
+
+def split_languages(text: str, mode: str) -> tuple[str, str]:
+    """Return (arabic, english) for a response in the requested output mode."""
+    if mode == "ar":
+        return text, ""
+    if mode == "en":
+        return "", text
+
+    parts = [p.strip() for p in SEPARATOR.split(text) if p.strip()]
+    if len(parts) < 2:
+        # The model ignored the separator. Rather than guessing a split point,
+        # show the whole response in the pane its script belongs to - a visibly
+        # one-sided result is easier to diagnose than a silently mangled one.
+        return (text, "") if is_arabic(text) else ("", text)
+
+    first, second = parts[0], parts[1]
+    if is_arabic(first):
+        return first, second
+    return second, first
 
 
 def chat(system_prompt: str, user_text: str) -> str:
@@ -49,8 +81,6 @@ def chat(system_prompt: str, user_text: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text},
         ],
-        # Low but not zero: register-switching needs some room to choose
-        # phrasing, while facts must not drift.
         temperature=0.25,
         max_tokens=2048,
     )
@@ -83,13 +113,13 @@ def rewrite():
     body = request.get_json(silent=True) or {}
     text = (body.get("text") or "").strip()
     register = body.get("register") or prompt_loader.DEFAULT_REGISTER
-    output = body.get("output") or prompt_loader.DEFAULT_OUTPUT
+    mode = body.get("output") or prompt_loader.DEFAULT_OUTPUT
 
     if not text:
         return jsonify({"error": "No text provided."}), 400
 
     try:
-        system_prompt = prompt_loader.build(register, output)
+        system_prompt = prompt_loader.build(register, mode)
     except PromptError as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -100,12 +130,14 @@ def rewrite():
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": f"Model call failed: {exc}"}), 502
 
+    arabic, english = split_languages(result, mode)
     return jsonify(
         {
             "original": text,
-            "output": result,
+            "arabic": arabic,
+            "english": english,
             "register": register,
-            "output_mode": output,
+            "output_mode": mode,
         }
     )
 
