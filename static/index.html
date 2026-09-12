@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Arabic CV Rewriter</title>
+</head>
+<body>
+  <h1>Gulf-Market Arabic CV Rewriter</h1>
+  <p id="status">Checking local model...</p>
+
+  <textarea id="input" rows="10" cols="80" placeholder="Paste CV bullet points here"></textarea>
+  <br>
+  <button id="go">Rewrite</button>
+
+  <h2>Output</h2>
+  <pre id="output"></pre>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const outputEl = document.getElementById('output');
+
+    fetch('/api/health')
+      .then(r => r.json())
+      .then(d => {
+        statusEl.textContent = d.ok
+          ? `Model ready: ${d.model}`
+          : `Not ready: ${d.error}`;
+      })
+      .catch(() => { statusEl.textContent = 'Backend not reachable.'; });
+
+    document.getElementById('go').addEventListener('click', async () => {
+      const text = document.getElementById('input').value;
+      outputEl.textContent = 'Working...';
+      try {
+        const res = await fetch('/api/rewrite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        outputEl.textContent = data.error ? `Error: ${data.error}` : data.output;
+      } catch (err) {
+        outputEl.textContent = `Error: ${err.message}`;
+      }
+    });
+  </script>
+</body>
+</html>

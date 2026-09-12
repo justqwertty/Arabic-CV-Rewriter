@@ -1,0 +1,13 @@
+# Web server. Flask is enough here - the backend is a single stateless endpoint,
+# so an async framework would add setup cost for no benefit.
+Flask==3.0.3
+
+# Foundry Local speaks the OpenAI HTTP protocol, so the official client works
+# unchanged - only base_url points at localhost instead of api.openai.com.
+openai==1.51.0
+
+# Resolves the Foundry Local endpoint and api_key at runtime. The local port is
+# not fixed across machines or restarts, so this is preferred over hardcoding.
+# If the install fails on your Python version, foundry_client.py falls back to
+# the `foundry` CLI - the app still runs without this package.
+foundry-local-sdk==0.5.1
