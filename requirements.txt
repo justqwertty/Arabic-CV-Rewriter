@@ -6,6 +6,10 @@ Flask==3.0.3
 # unchanged - only base_url points at localhost instead of api.openai.com.
 openai==1.51.0
 
+# openai 1.51.0 passes `proxies=` into httpx.Client(), an argument httpx removed
+# in 0.28. Pin below that so a fresh install doesn't pull an incompatible httpx.
+httpx==0.27.2
+
 # Resolves the Foundry Local endpoint and api_key at runtime. The local port is
 # not fixed across machines or restarts, so this is preferred over hardcoding.
 # If the install fails on your Python version, foundry_client.py falls back to

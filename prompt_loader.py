@@ -74,6 +74,11 @@ def build(register: str = DEFAULT_REGISTER, output: str = DEFAULT_OUTPUT) -> str
     parts.append("OUTPUT FORMAT FOR THIS REQUEST\n\n" + blocks[needed[2]])
     if blocks.get("EXAMPLES"):
         parts.append("EXAMPLES\n\n" + blocks["EXAMPLES"])
+        # The examples cover all three registers, so whichever one is closest
+        # in shape to the actual input tends to win by recency, regardless of
+        # which register was asked for. Restating the selected register last
+        # counteracts that pull without duplicating any example content.
+        parts.append("REGISTER FOR THIS REQUEST, AGAIN\n\n" + blocks[needed[1]])
 
     # Sections are joined with blank lines, not a `---` rule: in "both" mode
     # `---` is the separator the model is told to emit between the Arabic and

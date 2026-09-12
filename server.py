@@ -92,7 +92,7 @@ def chat(system_prompt: str, user_text: str) -> str:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text},
         ],
-        temperature=0.25,
+        temperature=0.1,
         max_tokens=2048,
     )
 
