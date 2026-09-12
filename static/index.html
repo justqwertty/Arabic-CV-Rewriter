@@ -11,14 +11,17 @@
 <header>
   <h1>Gulf-Market Arabic CV Rewriter</h1>
   <p class="sub">Rough CV bullets in. Gulf-recruiter-ready Arabic out. Runs entirely on your machine.</p>
-  <p id="status" class="status">Checking local model&hellip;</p>
+  <p id="status" class="status" role="status">Checking local model&hellip;</p>
 </header>
 
 <main>
 
   <section class="panel">
-    <label for="input" class="label">Your bullet points</label>
-    <textarea id="input" rows="10"
+    <div class="label-row">
+      <label for="input" class="label">Your bullet points</label>
+      <span id="counter" class="counter">0 / 3,000</span>
+    </div>
+    <textarea id="input" rows="10" maxlength="3200"
       placeholder="اكتب أو الصق نقاط سيرتك الذاتية هنا&#10;Paste your CV bullet points here — Arabic, English, dialect, or all three."></textarea>
   </section>
 
@@ -37,25 +40,25 @@
 
     <fieldset>
       <legend>Output language</legend>
-      <div class="options" id="output">
-        <label><input type="radio" name="output" value="ar">
-          <span><strong>Arabic</strong></span></label>
-        <label><input type="radio" name="output" value="en">
-          <span><strong>English</strong></span></label>
-        <label><input type="radio" name="output" value="both" checked>
-          <span><strong>Both</strong></span></label>
+      <div class="options compact" id="output">
+        <label><input type="radio" name="output" value="ar"><span><strong>Arabic</strong></span></label>
+        <label><input type="radio" name="output" value="en"><span><strong>English</strong></span></label>
+        <label><input type="radio" name="output" value="both" checked><span><strong>Both</strong></span></label>
       </div>
     </fieldset>
 
-    <button id="go" class="primary">Rewrite</button>
+    <button id="go" class="primary">
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="btn-label">Rewrite</span>
+    </button>
   </section>
 
-  <section id="results" class="results" hidden>
+  <p id="error" class="error" role="alert" hidden></p>
+
+  <section id="results" class="results" hidden aria-live="polite">
     <article class="card">
-      <header class="card-head">
-        <h2>Original</h2>
-      </header>
-      <div id="out-original" class="out"></div>
+      <header class="card-head"><h2>Original</h2></header>
+      <div id="out-original" class="out" dir="auto"></div>
     </article>
 
     <article class="card" id="card-ar" hidden>
@@ -74,8 +77,6 @@
       <div id="out-english" class="out" dir="ltr" lang="en"></div>
     </article>
   </section>
-
-  <p id="error" class="error" hidden></p>
 
 </main>
 

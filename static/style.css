@@ -1,5 +1,9 @@
-/* Day 3: enough layout to judge the side-by-side view.
-   RTL details, responsiveness and loading states land on Day 4. */
+/* Day 4: RTL pass, loading states, responsive layout.
+
+   Two things Arabic needs that a Latin-first stylesheet forgets:
+   more leading (Arabic diacritics and descenders collide at 1.6), and a font
+   stack that names Arabic faces explicitly - otherwise Windows falls back to a
+   default that renders Arabic noticeably smaller than the surrounding Latin. */
 
 :root {
   --ink: #17212b;
@@ -8,88 +12,169 @@
   --bg: #f6f8fa;
   --card: #ffffff;
   --accent: #0f6b4f;
+  --accent-dark: #0b5740;
+  --danger: #b42318;
+
+  --latin: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --arabic: "Segoe UI", "Noto Naskh Arabic", "Traditional Arabic", Tahoma, sans-serif;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  padding: 32px 24px 64px;
-  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 32px 20px 72px;
+  font: 15px/1.6 var(--latin);
   color: var(--ink);
   background: var(--bg);
 }
 
-header, main { max-width: 1100px; margin: 0 auto; }
+header, main { max-width: 1120px; margin: 0 auto; }
 
-h1 { font-size: 26px; margin: 0 0 6px; }
-.sub { margin: 0 0 12px; color: var(--muted); }
+h1 { font-size: clamp(21px, 4vw, 27px); margin: 0 0 6px; letter-spacing: -0.01em; }
+.sub { margin: 0 0 14px; color: var(--muted); }
 
-.status { font-size: 13px; margin: 0 0 24px; color: var(--muted); }
+.status { font-size: 13px; margin: 0 0 28px; color: var(--muted); }
 .status.ok { color: var(--accent); }
-.status.bad { color: #b42318; }
+.status.bad { color: var(--danger); }
 
-.label { display: block; font-weight: 600; margin-bottom: 8px; }
+/* --- input ------------------------------------------------------------- */
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.label { font-weight: 600; }
+
+.counter {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.counter.over { color: var(--danger); font-weight: 600; }
 
 textarea {
   width: 100%;
-  padding: 14px;
-  font: inherit;
+  padding: 14px 16px;
+  font: 15px/1.9 var(--latin);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--card);
   resize: vertical;
+  min-height: 180px;
 }
+
+textarea:focus-visible,
+.primary:focus-visible,
+.copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+textarea[dir="rtl"] { font-family: var(--arabic); text-align: right; }
+
+/* --- controls ---------------------------------------------------------- */
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: 20px 28px;
   align-items: flex-end;
-  margin: 20px 0 28px;
+  margin: 22px 0 28px;
 }
 
-fieldset { border: 0; padding: 0; margin: 0; }
-legend { font-weight: 600; padding: 0 0 8px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+legend { font-weight: 600; padding: 0 0 8px; font-size: 14px; }
 
-.options { display: flex; gap: 8px; }
+.options { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .options label {
-  display: block;
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--card);
   cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
 
-.options input { margin-right: 8px; }
-.options strong { font-weight: 600; }
-.options em { display: block; font-style: normal; font-size: 12px; color: var(--muted); }
+.options label:hover { border-color: #b9c4d0; }
+
+.options label:has(input:checked) {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.options input { margin: 0; accent-color: var(--accent); }
+.options strong { font-weight: 600; display: block; }
+.options em {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.options.compact label { padding: 9px 16px; }
+
+/* --- button + spinner -------------------------------------------------- */
 
 .primary {
-  padding: 12px 28px;
-  font: inherit;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 30px;
+  font: 600 15px var(--latin);
   color: #fff;
   background: var(--accent);
   border: 0;
-  border-radius: 8px;
+  border-radius: 9px;
   cursor: pointer;
+  transition: background 0.12s;
 }
 
-.primary:disabled { opacity: 0.6; cursor: default; }
+.primary:hover:not(:disabled) { background: var(--accent-dark); }
+.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.primary.loading .spinner { display: block; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2s; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* --- results ----------------------------------------------------------- */
 
 .results {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
+  align-items: start;
 }
 
 .card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 11px;
   overflow: hidden;
 }
 
@@ -97,36 +182,81 @@ legend { font-weight: 600; padding: 0 0 8px; }
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
+  background: #fbfcfd;
 }
 
-.card-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; color: var(--muted); }
+.card-head h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+  color: var(--muted);
+}
 
 .copy {
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 12px;
+  font: 500 12px var(--latin);
+  padding: 5px 13px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: none;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
   cursor: pointer;
 }
 
+.copy:hover { border-color: #b9c4d0; }
+.copy.done { color: var(--accent); border-color: var(--accent); }
+
 .out {
-  padding: 14px;
-  min-height: 120px;
+  padding: 16px;
+  min-height: 130px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
+
+  /* Each line gets its own base direction. The Original pane holds whatever the
+     user pasted - an Arabic line, then an English one, then a mixed one - and
+     without this a single block direction drags half of them backwards. */
+  unicode-bidi: plaintext;
+}
+
+/* Arabic gets its own face and more leading. `unicode-bidi: plaintext` keeps
+   inline English terms (API, React, Vodafone) from being reordered inside an
+   RTL paragraph - which is exactly what the tech register produces. */
+.out.rtl {
+  direction: rtl;
+  text-align: right;
+  font-family: var(--arabic);
+  font-size: 16px;
+  line-height: 2;
+  unicode-bidi: plaintext;
+}
+
+/* --- error ------------------------------------------------------------- */
+
+.error {
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  border: 1px solid #f2c4bf;
+  border-radius: 9px;
+  background: #fdf2f1;
+  color: var(--danger);
   white-space: pre-wrap;
 }
 
-.out.rtl { direction: rtl; text-align: right; }
+/* --- narrow screens ---------------------------------------------------- */
 
-.error {
-  margin-top: 20px;
-  padding: 12px 16px;
-  border: 1px solid #f2c4bf;
-  border-radius: 8px;
-  background: #fdf2f1;
-  color: #b42318;
-  white-space: pre-wrap;
+@media (max-width: 640px) {
+  body { padding: 24px 14px 56px; }
+
+  .controls { flex-direction: column; align-items: stretch; gap: 18px; }
+  .options { display: grid; grid-template-columns: 1fr 1fr; }
+  .options.compact { grid-template-columns: repeat(3, 1fr); }
+  .options label { justify-content: center; text-align: center; }
+  .options.compact em { display: none; }
+  .primary { justify-content: center; width: 100%; }
+
+  .results { grid-template-columns: 1fr; }
 }

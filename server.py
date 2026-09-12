@@ -1,15 +1,16 @@
 """
 Gulf-Market Arabic CV Rewriter - backend.
 
-Day 3: the register and output-language choices made in the browser are now
-wired through to the prompt, and "both" responses are split into two fields so
-the frontend can lay them out side by side instead of showing one blob.
+Day 4: nothing fails silently. Every path out of /api/rewrite returns either a
+result or a sentence a non-technical user can act on, and a local 7B model's
+slowest realistic response still fits inside the timeout.
 """
 
 from __future__ import annotations
 
 import re
 
+import openai
 from flask import Flask, jsonify, request, send_from_directory
 from openai import OpenAI
 
@@ -19,6 +20,15 @@ from foundry_client import FoundryUnavailable
 from prompt_loader import PromptError
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+
+# Matches the counter in the browser. Not a billing limit - nothing is billed -
+# but a 7B model's quality and latency both degrade on very long inputs, and a
+# CV section that runs past 3,000 characters is not a CV section any more.
+MAX_CHARS = 3000
+
+# A 7B model on a single consumer GPU can take well over a minute on a long
+# input. Anything past this is a hung service rather than a slow one.
+REQUEST_TIMEOUT = 180
 
 # Qwen 2.5 Coder is a code model. Left alone it reaches for markdown fences and
 # for "Here is the rewritten version:" preambles no matter how firmly the prompt
@@ -46,9 +56,7 @@ def clean(text: str) -> str:
 def is_arabic(text: str) -> bool:
     """True if Arabic script dominates. Tech-register bullets are mixed, so a
     presence check is not enough - compare against Latin letters."""
-    arabic = len(ARABIC.findall(text))
-    latin = len(re.findall(r"[A-Za-z]", text))
-    return arabic > latin
+    return len(ARABIC.findall(text)) > len(re.findall(r"[A-Za-z]", text))
 
 
 def split_languages(text: str, mode: str) -> tuple[str, str]:
@@ -66,14 +74,17 @@ def split_languages(text: str, mode: str) -> tuple[str, str]:
         return (text, "") if is_arabic(text) else ("", text)
 
     first, second = parts[0], parts[1]
-    if is_arabic(first):
-        return first, second
-    return second, first
+    return (first, second) if is_arabic(first) else (second, first)
 
 
 def chat(system_prompt: str, user_text: str) -> str:
     endpoint = foundry_client.resolve()
-    client = OpenAI(base_url=endpoint.base_url, api_key=endpoint.api_key)
+    client = OpenAI(
+        base_url=endpoint.base_url,
+        api_key=endpoint.api_key,
+        timeout=REQUEST_TIMEOUT,
+        max_retries=1,
+    )
 
     completion = client.chat.completions.create(
         model=endpoint.model_id,
@@ -84,7 +95,16 @@ def chat(system_prompt: str, user_text: str) -> str:
         temperature=0.25,
         max_tokens=2048,
     )
-    return clean(completion.choices[0].message.content or "")
+
+    choice = completion.choices[0]
+    text = clean(choice.message.content or "")
+    if not text:
+        raise RuntimeError(
+            "The model returned an empty response. This usually means the "
+            "prompt plus your input exceeded its context window - try fewer "
+            "bullets at a time."
+        )
+    return text
 
 
 @app.get("/")
@@ -104,6 +124,7 @@ def health():
             "endpoint": endpoint.base_url,
             "model": endpoint.model_id,
             "resolved_via": endpoint.source,
+            "max_chars": MAX_CHARS,
         }
     )
 
@@ -115,20 +136,56 @@ def rewrite():
     register = body.get("register") or prompt_loader.DEFAULT_REGISTER
     mode = body.get("output") or prompt_loader.DEFAULT_OUTPUT
 
+    # --- input validation ---------------------------------------------
     if not text:
-        return jsonify({"error": "No text provided."}), 400
+        return jsonify({"error": "Paste some bullet points first."}), 400
 
+    if len(text) > MAX_CHARS:
+        return jsonify(
+            {
+                "error": f"That is {len(text):,} characters. The limit is "
+                f"{MAX_CHARS:,} — rewrite one CV section at a time for better "
+                f"results anyway."
+            }
+        ), 413
+
+    # --- prompt assembly ----------------------------------------------
     try:
         system_prompt = prompt_loader.build(register, mode)
     except PromptError as exc:
         return jsonify({"error": str(exc)}), 500
 
+    # --- model call ----------------------------------------------------
     try:
         result = chat(system_prompt, text)
     except FoundryUnavailable as exc:
         return jsonify({"error": str(exc)}), 503
+    except openai.APITimeoutError:
+        return jsonify(
+            {
+                "error": f"The model did not respond within {REQUEST_TIMEOUT} "
+                "seconds. Check that Foundry Local is still running, then try a "
+                "shorter input."
+            }
+        ), 504
+    except openai.APIConnectionError:
+        return jsonify(
+            {
+                "error": "Lost the connection to Foundry Local. Restart it with "
+                "`foundry run qwen2.5-coder-7b` and reload this page."
+            }
+        ), 503
+    except openai.NotFoundError:
+        # Almost always a stale cached model id after a service restart.
+        foundry_client.resolve(refresh=True)
+        return jsonify(
+            {
+                "error": "The loaded model changed. Reload the page and try "
+                "again."
+            }
+        ), 409
     except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": f"Model call failed: {exc}"}), 502
+        return jsonify({"error": f"Rewrite failed: {exc}"}), 502
 
     arabic, english = split_languages(result, mode)
     return jsonify(
@@ -142,6 +199,11 @@ def rewrite():
     )
 
 
+@app.errorhandler(404)
+def not_found(_):
+    return jsonify({"error": "No such endpoint."}), 404
+
+
 if __name__ == "__main__":
     print("Checking Foundry Local...")
     try:
@@ -152,4 +214,5 @@ if __name__ == "__main__":
         print(f"  WARNING: {exc}")
         print("  Server will still start; /api/health will report the problem.")
 
+    print("\n  http://127.0.0.1:5000\n")
     app.run(host="127.0.0.1", port=5000, debug=True)
