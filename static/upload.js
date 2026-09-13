@@ -21,7 +21,11 @@ const sectionsList = byId('sections-list');
 const rewriteAllBtn = byId('rewrite-all');
 const sectionTemplate = byId('section-template');
 
-const goBtn = byId('go');
+// Named pasteRewriteBtn, not goBtn: app.js already declares a top-level
+// `const goBtn` for the same #go element, and (like `$` above) two classic
+// <script> tags share one global scope, so reusing that name here would
+// throw a SyntaxError and silently break this entire file.
+const pasteRewriteBtn = byId('go');
 const pasteErrorEl = byId('error');
 
 const checkedGlobal = (name) =>
@@ -37,7 +41,7 @@ function setMode(mode) {
   modePasteBtn.setAttribute('aria-selected', String(!isUpload));
   uploadPanel.hidden = !isUpload;
   pastePanel.hidden = isUpload;
-  goBtn.hidden = isUpload;
+  pasteRewriteBtn.hidden = isUpload;
   pasteErrorEl.hidden = isUpload;
 }
 
@@ -116,8 +120,6 @@ function buildSectionCard(section) {
   const bulletsArea = card.querySelector('.section-bullets');
   const registerSelect = card.querySelector('.section-register');
   const rewriteBtn = card.querySelector('.section-rewrite');
-  const errorEl = card.querySelector('.section-error');
-  const resultsEl = card.querySelector('.section-results');
 
   nameInput.value = section.name;
   bulletsArea.value = section.bullets.join('\n');
@@ -133,7 +135,6 @@ async function rewriteSection(card) {
   const registerSelect = card.querySelector('.section-register');
   const rewriteBtn = card.querySelector('.section-rewrite');
   const errorEl = card.querySelector('.section-error');
-  const resultsEl = card.querySelector('.section-results');
 
   const text = bulletsArea.value.trim();
   errorEl.hidden = true;
