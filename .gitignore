@@ -13,6 +13,3 @@ samples/last-run.md
 # Local commit-replay scaffolding, not part of the project
 .staging/
 stage-commit.ps1
-
-# Working context for Claude Code. Delete this line to track it.
-CLAUDE.md
