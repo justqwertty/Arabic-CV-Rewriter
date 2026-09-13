@@ -15,3 +15,9 @@ httpx==0.27.2
 # If the install fails on your Python version, foundry_client.py falls back to
 # the `foundry` CLI - the app still runs without this package.
 foundry-local-sdk==0.5.1
+
+# Text extraction for uploaded CVs. Both are pure-Python, no system
+# dependencies (no poppler/libreoffice binary needed), matching the
+# project's no-heavy-dependency approach.
+pypdf==5.1.0
+python-docx==1.1.2

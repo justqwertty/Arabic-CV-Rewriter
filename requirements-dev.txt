@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Test runner.
+pytest==8.3.3
+
+# Used only by tests, to build in-memory PDF fixtures without checking in
+# binary files. Never imported by application code.
+reportlab==4.2.5

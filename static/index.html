@@ -16,13 +16,31 @@
 
 <main>
 
-  <section class="panel">
+  <div class="mode-toggle" role="tablist">
+    <button type="button" id="mode-paste" class="mode-btn active" role="tab" aria-selected="true">Paste text</button>
+    <button type="button" id="mode-upload" class="mode-btn" role="tab" aria-selected="false">Upload CV</button>
+  </div>
+
+  <section class="panel" id="paste-panel">
     <div class="label-row">
       <label for="input" class="label">Your bullet points</label>
       <span id="counter" class="counter">0 / 3,000</span>
     </div>
     <textarea id="input" rows="10" maxlength="3200"
       placeholder="اكتب أو الصق نقاط سيرتك الذاتية هنا&#10;Paste your CV bullet points here — Arabic, English, dialect, or all three."></textarea>
+  </section>
+
+  <section class="panel upload-panel" id="upload-panel" hidden>
+    <div class="label-row">
+      <label for="upload-file" class="label">Upload a CV (PDF or Word)</label>
+    </div>
+    <input type="file" id="upload-file" accept=".pdf,.docx">
+    <button id="upload-extract" class="primary">
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="btn-label">Extract sections</span>
+    </button>
+    <p id="upload-error" class="error" role="alert" hidden></p>
+    <p id="upload-degraded" class="notice" hidden>Couldn't detect sections — showing the whole document as one block.</p>
   </section>
 
   <section class="controls">
@@ -55,6 +73,56 @@
 
   <p id="error" class="error" role="alert" hidden></p>
 
+  <section id="sections-review" class="sections-review" hidden aria-live="polite">
+    <div class="section-review-head">
+      <h2>Review sections</h2>
+      <button id="rewrite-all" class="primary">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="btn-label">Rewrite all sections</span>
+      </button>
+    </div>
+    <div id="sections-list"></div>
+  </section>
+
+  <template id="section-template">
+    <article class="section-card">
+      <div class="section-head">
+        <input type="text" class="section-name" aria-label="Section name">
+        <select class="section-register" aria-label="Register for this section">
+          <option value="formal">Formal</option>
+          <option value="corporate" selected>Corporate</option>
+          <option value="tech">Tech</option>
+        </select>
+        <button class="section-rewrite primary small">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="btn-label">Rewrite</span>
+        </button>
+      </div>
+      <textarea class="section-bullets" rows="6" aria-label="Section bullets"></textarea>
+      <p class="section-error error" role="alert" hidden></p>
+      <section class="section-results results" hidden>
+        <article class="card">
+          <header class="card-head"><h2>Original</h2></header>
+          <div class="out section-out-original" dir="auto"></div>
+        </article>
+        <article class="card section-card-ar" hidden>
+          <header class="card-head">
+            <h2>Arabic</h2>
+            <button class="copy" data-role="copy-ar">Copy</button>
+          </header>
+          <div class="out rtl section-out-arabic" dir="rtl" lang="ar"></div>
+        </article>
+        <article class="card section-card-en" hidden>
+          <header class="card-head">
+            <h2>English</h2>
+            <button class="copy" data-role="copy-en">Copy</button>
+          </header>
+          <div class="out section-out-english" dir="ltr" lang="en"></div>
+        </article>
+      </section>
+    </article>
+  </template>
+
   <section id="results" class="results" hidden aria-live="polite">
     <article class="card">
       <header class="card-head"><h2>Original</h2></header>
@@ -81,5 +149,6 @@
 </main>
 
 <script src="app.js"></script>
+<script src="upload.js"></script>
 </body>
 </html>
