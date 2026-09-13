@@ -80,9 +80,13 @@ it's a single fixed prompt.
 
 - Accepts multipart form data, one file field (`file`).
 - Extension allowlist: `.pdf`, `.docx` only (case-insensitive). Anything else → 400.
-- Raw extracted text capped at 12,000 characters (a whole CV, not one
-  section — `MAX_CHARS` for `/api/rewrite` stays 3,000 per section) → 413 with
-  a message naming the actual length and the cap.
+- **No whole-document character cap.** Extraction and sectioning run on
+  whatever text comes out of the file — a real CV is the whole point of this
+  endpoint, and an artificial ceiling would reject exactly the input it
+  exists to handle. The existing `chat()` empty-response guard already
+  produces a clear "exceeded the model's context window" error if a
+  pathologically large document overflows Qwen's context — no new cap needed
+  to catch that case, it reuses infrastructure that's already there.
 - Calls the model with `build_section_prompt()` + raw text, same `chat()`
   helper and same timeout/connection-error handling already in `server.py`.
 - Parses the model's JSON response. On `json.JSONDecodeError` or a shape
@@ -92,7 +96,20 @@ it's a single fixed prompt.
   visibly degraded result (one big section instead of several) rather than a
   guessed split, consistent with `split_languages`'s existing philosophy of
   "a visible one-sided failure beats a silent mangling."
-- Response: `{"sections": [...], "source_filename": "..."}`.
+- **Oversized-section splitting.** `MAX_CHARS` (3,000) is still the limit
+  `/api/rewrite` enforces per call. After sectioning (model-derived or
+  fallback), run `split_oversized(sections) -> sections`: for any section
+  whose bullets joined exceed `MAX_CHARS`, greedily bin-pack its bullets into
+  consecutive chunks that each stay under the limit — never splitting a
+  bullet itself, since a fact must not be cut mid-sentence — and rename the
+  resulting parts `"<name> (1/3)"`, `"<name> (2/3)"`, etc. This is pure
+  string bin-packing in Python, no extra model call. The rare case of a
+  single bullet alone exceeding `MAX_CHARS` is left as-is; it will surface
+  the existing `/api/rewrite` 413 on just that one card when the user tries
+  to rewrite it, same message as today's paste flow.
+- Response: `{"sections": [...], "source_filename": "..."}` — already
+  post-split, so the frontend treats every entry as an ordinary independent
+  section and needs no sub-card or re-merge logic.
 
 ## 4. Frontend
 
@@ -133,10 +150,11 @@ status → plain-language, non-technical message. New cases:
 | Condition | Status | Message tone |
 |---|---|---|
 | Extension not `.pdf`/`.docx` | 400 | "Upload a PDF or Word (.docx) file." |
-| Extracted/raw text > 12,000 chars | 413 | States actual length and the cap, suggests trimming the file. |
 | Corrupt file / password-protected PDF | 422 | "Could not read that file — ..." specific reason where extract.py knows it. |
 | Extraction yields empty text (e.g. scanned image PDF) | 422 | "No selectable text found in that file — this looks like a scanned image, which isn't supported yet." |
+| Document too large for the model's context window | 502 | Existing `chat()` empty-response message, reused verbatim: suggests fewer bullets/a shorter document. |
 | Sectioning JSON unparseable after retry | 200 (degraded) | Frontend shows a small inline notice: "Couldn't detect sections — showing the whole document as one block." above the single fallback section. |
+| One section still over 3,000 chars after auto-split (single oversized bullet) | 413, but only on that one card | Same message `/api/rewrite` already returns today, shown inline on that section's card instead of blocking the whole upload. |
 | Foundry unavailable / timeout during sectioning | 503 / 504 | Same messages already used by `/api/rewrite`, reused verbatim. |
 
 ## 6. Testing
@@ -146,6 +164,10 @@ status → plain-language, non-technical message. New cases:
   correct `ExtractionError` message.
 - Unit test for the sectioning fallback path with the model call mocked to
   return malformed JSON — assert the synthetic single-section fallback.
+- Unit tests for `split_oversized()`: a section under the limit passes
+  through unchanged; a section over the limit splits into correctly-named
+  `(n/total)` parts each under `MAX_CHARS`; a single bullet alone over the
+  limit is left as one oversized part rather than crashing.
 - Manual verification against a live Foundry Local instance: upload a real
   CV (Omar's own, or a sample), confirm sections are reasonable, confirm
   per-section register override actually changes output, confirm the
