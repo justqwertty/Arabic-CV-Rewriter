@@ -25,6 +25,12 @@ from prompt_loader import PromptError
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
+# A CV upload has no legitimate reason to be anywhere near this large; this
+# exists to fail fast on a mis-picked huge file rather than reading it fully
+# into memory first. Flask returns 413 automatically once a request body
+# exceeds this, before /api/parse-upload's route code ever runs.
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25 MB
+
 # Matches the counter in the browser. Not a billing limit - nothing is billed -
 # but a 7B model's quality and latency both degrade on very long inputs, and a
 # CV section that runs past 3,000 characters is not a CV section any more.
@@ -164,7 +170,7 @@ def chat_error_response(exc: Exception):
         return jsonify(
             {"error": "The loaded model changed. Reload the page and try again."}
         ), 409
-    return jsonify({"error": f"Rewrite failed: {exc}"}), 502
+    return jsonify({"error": f"Model call failed: {exc}"}), 502
 
 
 @app.post("/api/rewrite")

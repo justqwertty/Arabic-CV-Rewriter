@@ -21,6 +21,9 @@ const sectionsList = byId('sections-list');
 const rewriteAllBtn = byId('rewrite-all');
 const sectionTemplate = byId('section-template');
 
+const goBtn = byId('go');
+const pasteErrorEl = byId('error');
+
 const checkedGlobal = (name) =>
   document.querySelector(`input[name="${name}"]:checked`).value;
 
@@ -34,6 +37,8 @@ function setMode(mode) {
   modePasteBtn.setAttribute('aria-selected', String(!isUpload));
   uploadPanel.hidden = !isUpload;
   pastePanel.hidden = isUpload;
+  goBtn.hidden = isUpload;
+  pasteErrorEl.hidden = isUpload;
 }
 
 modePasteBtn.addEventListener('click', () => setMode('paste'));
@@ -60,6 +65,8 @@ async function extractSections() {
 
   uploadErrorEl.hidden = true;
   uploadDegradedEl.hidden = true;
+  sectionsReview.hidden = true;
+  sectionsList.innerHTML = '';
   setExtractBusy(true);
 
   const formData = new FormData();
@@ -117,10 +124,6 @@ function buildSectionCard(section) {
   registerSelect.value = checkedGlobal('register');
 
   rewriteBtn.addEventListener('click', () => rewriteSection(card));
-
-  card._rewrite = () => rewriteSection(card);
-  card._errorEl = errorEl;
-  card._resultsEl = resultsEl;
 
   return card;
 }
