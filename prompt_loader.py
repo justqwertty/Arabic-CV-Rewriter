@@ -15,6 +15,9 @@ import re
 from typing import Dict
 
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "rewrite-prompt.md")
+SECTION_PROMPT_PATH = os.path.join(
+    os.path.dirname(__file__), "prompts", "section-prompt.md"
+)
 
 REGISTERS = ("formal", "corporate", "tech")
 OUTPUTS = ("ar", "en", "both")
@@ -85,6 +88,21 @@ def build(register: str = DEFAULT_REGISTER, output: str = DEFAULT_OUTPUT) -> str
     # English blocks, and seeing it used as section furniture in its own
     # instructions is a reliable way to get it sprinkled through the output.
     return "\n\n\n".join(parts)
+
+
+def build_section_prompt() -> str:
+    """Return the fixed system prompt used to split raw CV text into named
+    sections. Unlike build(), there is no register/output variation - one
+    prompt, re-read from disk on every request like the rewrite prompt."""
+    try:
+        with open(SECTION_PROMPT_PATH, encoding="utf-8") as fh:
+            blocks = _parse(fh.read())
+    except OSError as exc:
+        raise PromptError(f"Could not read {SECTION_PROMPT_PATH}: {exc}") from exc
+
+    if "BASE" not in blocks:
+        raise PromptError("prompts/section-prompt.md is missing block: BASE")
+    return blocks["BASE"]
 
 
 if __name__ == "__main__":
