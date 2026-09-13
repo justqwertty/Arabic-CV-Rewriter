@@ -5,6 +5,12 @@ Paste rough CV bullet points — English, formal Arabic, Egyptian dialect, or al
 ## How It Works
 
 1. **Paste your bullets.** One CV section at a time, up to 3,000 characters. Mixed input is fine — the tool sorts out the languages itself, you don't have to separate them first.
+
+   Alternatively, click **Upload CV** to upload a `.pdf` or `.docx` file —
+   the backend extracts its text and splits it into sections (Experience,
+   Education, Skills, ...) for you to review, edit, and rewrite one section
+   at a time, each with its own register.
+
 2. **Pick a target register.** *Formal* for government bodies and banks, *Corporate* for multinationals, *Tech* for startups and engineering teams. The register changes how conservative the Arabic is and how much English vocabulary survives untranslated.
 3. **Pick an output language.** Arabic, English, or both side by side.
 4. **Hit Rewrite.** The backend assembles a system prompt from `prompts/rewrite-prompt.md`, combining the base rules, the selected register block, the output-format block, and the few-shot examples, then sends it with your text to the local model.
@@ -81,6 +87,8 @@ There is no deployment step. The tool is designed to run on the machine that hol
 | **Flask** | The backend is two stateless endpoints. An async framework would add setup cost for no benefit at this size. |
 | **openai** | Foundry Local speaks the OpenAI HTTP protocol, so the official client works unchanged — only `base_url` points at localhost. This is also what makes swapping models a one-line change. |
 | **foundry-local-sdk** | Resolves the service endpoint and api_key at runtime. Foundry Local binds a different port on each machine and after each restart, so hardcoding `localhost:<port>` works exactly once. `foundry_client.py` falls back to parsing the `foundry` CLI and then to probing known ports, so a failed SDK install is not fatal. |
+| **pypdf** | Pure-Python PDF text extraction for CV upload — no system-level poppler/libreoffice dependency to install. |
+| **python-docx** | Reads `.docx` paragraph text directly from the XML — same no-system-dependency reasoning as pypdf. |
 
 No frontend framework, no build step, no database — the tool is text in, text out, with nothing to persist between requests.
 
@@ -100,7 +108,6 @@ Because the interface is OpenAI-compatible, that is the entire change — no cod
 
 ## Possible Improvements
 
-- **PDF and DOCX upload.** Paste-only is the honest v1 scope, but parsing an uploaded CV and rewriting section by section is the obvious next step and the one users will ask for first.
 - **More Gulf registers.** Saudi public sector, UAE semi-government and Qatari energy-sector CVs are not interchangeable; each could get its own register block in `prompts/rewrite-prompt.md` without touching any code.
 - **Batch processing.** A whole CV's worth of sections in one pass, with per-section registers, rather than one paste at a time.
 - **A diff view.** Highlighting exactly which facts carried through and which words changed would make the fact-preservation guarantee visible instead of something the user has to verify by eye.

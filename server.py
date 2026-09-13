@@ -8,23 +8,37 @@ slowest realistic response still fits inside the timeout.
 
 from __future__ import annotations
 
+import os
 import re
 
 import openai
 from flask import Flask, jsonify, request, send_from_directory
 from openai import OpenAI
+from werkzeug.utils import secure_filename
 
+import extract
 import foundry_client
 import prompt_loader
+import sectioning
 from foundry_client import FoundryUnavailable
 from prompt_loader import PromptError
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
+# A CV upload has no legitimate reason to be anywhere near this large; this
+# exists to fail fast on a mis-picked huge file rather than reading it fully
+# into memory first. Flask returns 413 automatically once a request body
+# exceeds this, before /api/parse-upload's route code ever runs.
+app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024  # 25 MB
+
 # Matches the counter in the browser. Not a billing limit - nothing is billed -
 # but a 7B model's quality and latency both degrade on very long inputs, and a
 # CV section that runs past 3,000 characters is not a CV section any more.
 MAX_CHARS = 3000
+
+# CV uploads accepted by /api/parse-upload. Anything else is rejected before
+# extraction is even attempted.
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".docx"}
 
 # A 7B model on a single consumer GPU can take well over a minute on a long
 # input. Anything past this is a hung service rather than a slow one.
@@ -129,6 +143,36 @@ def health():
     )
 
 
+def chat_error_response(exc: Exception):
+    """Map a chat()/Foundry error to a (JSON body, status) response. Shared
+    between /api/rewrite and /api/parse-upload so both endpoints fail the
+    same way for the same underlying problem."""
+    if isinstance(exc, FoundryUnavailable):
+        return jsonify({"error": str(exc)}), 503
+    if isinstance(exc, openai.APITimeoutError):
+        return jsonify(
+            {
+                "error": f"The model did not respond within {REQUEST_TIMEOUT} "
+                "seconds. Check that Foundry Local is still running, then try a "
+                "shorter input."
+            }
+        ), 504
+    if isinstance(exc, openai.APIConnectionError):
+        return jsonify(
+            {
+                "error": "Lost the connection to Foundry Local. Restart it with "
+                "`foundry run qwen2.5-coder-7b` and reload this page."
+            }
+        ), 503
+    if isinstance(exc, openai.NotFoundError):
+        # Almost always a stale cached model id after a service restart.
+        foundry_client.resolve(refresh=True)
+        return jsonify(
+            {"error": "The loaded model changed. Reload the page and try again."}
+        ), 409
+    return jsonify({"error": f"Model call failed: {exc}"}), 502
+
+
 @app.post("/api/rewrite")
 def rewrite():
     body = request.get_json(silent=True) or {}
@@ -158,34 +202,8 @@ def rewrite():
     # --- model call ----------------------------------------------------
     try:
         result = chat(system_prompt, text)
-    except FoundryUnavailable as exc:
-        return jsonify({"error": str(exc)}), 503
-    except openai.APITimeoutError:
-        return jsonify(
-            {
-                "error": f"The model did not respond within {REQUEST_TIMEOUT} "
-                "seconds. Check that Foundry Local is still running, then try a "
-                "shorter input."
-            }
-        ), 504
-    except openai.APIConnectionError:
-        return jsonify(
-            {
-                "error": "Lost the connection to Foundry Local. Restart it with "
-                "`foundry run qwen2.5-coder-7b` and reload this page."
-            }
-        ), 503
-    except openai.NotFoundError:
-        # Almost always a stale cached model id after a service restart.
-        foundry_client.resolve(refresh=True)
-        return jsonify(
-            {
-                "error": "The loaded model changed. Reload the page and try "
-                "again."
-            }
-        ), 409
     except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": f"Rewrite failed: {exc}"}), 502
+        return chat_error_response(exc)
 
     arabic, english = split_languages(result, mode)
     return jsonify(
@@ -195,6 +213,56 @@ def rewrite():
             "english": english,
             "register": register,
             "output_mode": mode,
+        }
+    )
+
+
+def _run_sectioning(section_prompt: str, raw_text: str) -> tuple[list[dict], bool]:
+    """Try the model's sectioning JSON up to twice; fall back to one big
+    section rather than guessing a split. Returns (sections, degraded)."""
+    for _ in range(2):
+        raw_json = chat(section_prompt, raw_text)
+        try:
+            return sectioning.parse_sections(raw_json), False
+        except sectioning.SectioningError:
+            continue
+    return sectioning.fallback_section(raw_text), True
+
+
+@app.post("/api/parse-upload")
+def parse_upload():
+    file = request.files.get("file")
+    if file is None or not file.filename:
+        return jsonify({"error": "Upload a PDF or Word (.docx) file."}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
+        return jsonify({"error": "Upload a PDF or Word (.docx) file."}), 400
+
+    file_bytes = file.read()
+
+    try:
+        raw_text = extract.extract_text(file_bytes, ext)
+    except extract.ExtractionError as exc:
+        return jsonify({"error": str(exc)}), 422
+
+    try:
+        section_prompt = prompt_loader.build_section_prompt()
+    except PromptError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    try:
+        sections, degraded = _run_sectioning(section_prompt, raw_text)
+    except Exception as exc:  # noqa: BLE001
+        return chat_error_response(exc)
+
+    sections = sectioning.split_oversized(sections, MAX_CHARS)
+
+    return jsonify(
+        {
+            "sections": sections,
+            "source_filename": secure_filename(file.filename),
+            "degraded": degraded,
         }
     )
 
